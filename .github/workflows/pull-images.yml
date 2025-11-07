@@ -1,12 +1,12 @@
 name: 同步外网镜像到阿里云
 
-# 触发条件：手动触发和每天凌晨3点（北京时间）执行
+# 触发条件：手动触发、每天凌晨3点（北京时间）和代码push时执行
 on:
   workflow_dispatch:  # 手动触发
-#  schedule:
-#  - cron: '0 19 * * *'  # UTC 19点 = 北京时间凌晨3点
-  push:               # 代码push时自动触发（新增）
-    branches: [ "**" ]  # 监听所有分支的push（如需限制特定分支，可改为具体分支名，如 [main, master]）
+    #  schedule:
+    #    - cron: '0 19 * * *'  # UTC 19点 = 北京时间凌晨3点（已启用）
+  push:               # 代码push时自动触发
+    branches: [ "**" ]  # 监听所有分支的push
 
 jobs:
   mirror-image:
@@ -14,11 +14,11 @@ jobs:
     env:
       # 定义需要同步的镜像列表（多个镜像用空格分隔）
       SOURCE_IMAGES: "redis:latest"
-      # 阿里云仓库信息（明文，仅测试用）
+      # 阿里云仓库信息（建议后续迁移到GitHub Secrets）
       ALI_REGISTRY: "registry.cn-hangzhou.aliyuncs.com"  # 阿里云仓库地址
       ALI_USERNAME: "筱晓爷cq"                           # 登录用户名
-      ALI_PASSWORD: "Hj20230701*"                           # 登录密码
-      ALI_REPO_PREFIX: "cqqxx-test/github-images"         # 仓库路径前缀
+      ALI_PASSWORD: "Hj20230701*"                        # 登录密码
+      ALI_REPO_PREFIX: "github-pushimages"               # 仓库路径（修改为目标仓库）
 
     steps:
       - name: 拉取仓库代码
@@ -39,7 +39,7 @@ jobs:
             echo "✅ 拉取镜像 $image 成功"
           done
 
-      - name: 镜像打标签（适配阿里云仓库格式）
+      - name: 镜像打标签（保持原镜像名和版本）
         run: |
           echo "开始为镜像打标签（目标仓库：${ALI_REGISTRY}/${ALI_REPO_PREFIX}）"
           
@@ -48,11 +48,8 @@ jobs:
             IMAGE_NAME=$(echo "$image" | cut -d: -f1)
             IMAGE_TAG=$(echo "$image" | cut -d: -f2)
             
-            # 处理镜像名中的特殊字符（替换斜线为横线，避免标签格式错误）
-            SANITIZED_NAME=$(echo "$IMAGE_NAME" | tr '/' '-')
-            
-            # 构建目标镜像地址（匹配你的推送格式）
-            TARGET_IMAGE="${ALI_REGISTRY}/${ALI_REPO_PREFIX}:${SANITIZED_NAME}-${IMAGE_TAG}"
+            # 构建目标镜像地址（保持原镜像名和版本）
+            TARGET_IMAGE="${ALI_REGISTRY}/${ALI_REPO_PREFIX}/${IMAGE_NAME}:${IMAGE_TAG}"
             
             echo "===== 标记镜像: $image → $TARGET_IMAGE ====="
             if ! docker tag "$image" "$TARGET_IMAGE"; then
@@ -62,7 +59,7 @@ jobs:
             echo "✅ 标记镜像 $image 成功"
           done
 
-      - name: 登录阿里云容器仓库（明文账号）
+      - name: 登录阿里云容器仓库
         uses: docker/login-action@v3
         with:
           registry: ${{ env.ALI_REGISTRY }}
@@ -76,8 +73,7 @@ jobs:
           for image in $SOURCE_IMAGES; do
             IMAGE_NAME=$(echo "$image" | cut -d: -f1)
             IMAGE_TAG=$(echo "$image" | cut -d: -f2)
-            SANITIZED_NAME=$(echo "$IMAGE_NAME" | tr '/' '-')
-            TARGET_IMAGE="${ALI_REGISTRY}/${ALI_REPO_PREFIX}:${SANITIZED_NAME}-${IMAGE_TAG}"
+            TARGET_IMAGE="${ALI_REGISTRY}/${ALI_REPO_PREFIX}/${IMAGE_NAME}:${IMAGE_TAG}"
             
             echo "===== 推送镜像: $TARGET_IMAGE ====="
             if ! docker push "$TARGET_IMAGE"; then

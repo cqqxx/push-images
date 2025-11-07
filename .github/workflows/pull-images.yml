@@ -88,3 +88,4 @@ jobs:
           echo "开始清理本地镜像"
           docker system prune -af
           echo "✅ 清理完成"
+

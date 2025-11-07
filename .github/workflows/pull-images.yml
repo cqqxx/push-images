@@ -3,15 +3,17 @@ name: 同步外网镜像到阿里云
 # 触发条件：手动触发和每天凌晨3点（北京时间）执行
 on:
   workflow_dispatch:  # 手动触发
-  schedule:
-    - cron: '0 19 * * *'  # UTC 19点 = 北京时间凌晨3点
+#  schedule:
+#  - cron: '0 19 * * *'  # UTC 19点 = 北京时间凌晨3点
+  push:               # 代码push时自动触发（新增）
+    branches: [ "**" ]  # 监听所有分支的push（如需限制特定分支，可改为具体分支名，如 [main, master]）
 
 jobs:
   mirror-image:
     runs-on: ubuntu-latest
     env:
       # 定义需要同步的镜像列表（多个镜像用空格分隔）
-      SOURCE_IMAGES: "nginx:latest ubuntu:22.04 python:3.11 alpine:3.18"
+      SOURCE_IMAGES: "redis:latest"
       # 阿里云仓库信息（明文，仅测试用）
       ALI_REGISTRY: "registry.cn-hangzhou.aliyuncs.com"  # 阿里云仓库地址
       ALI_USERNAME: "筱晓爷cq"                           # 登录用户名

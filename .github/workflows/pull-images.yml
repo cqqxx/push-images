@@ -3,8 +3,8 @@ name: 同步外网镜像到阿里云
 # 触发条件：手动触发、每天凌晨3点（北京时间）和代码push时执行
 on:
   workflow_dispatch:  # 手动触发
-    #  schedule:
-    #    - cron: '0 19 * * *'  # UTC 19点 = 北京时间凌晨3点（已启用）
+  # schedule:
+  #   - cron: '0 19 * * *'  # UTC 19点 = 北京时间凌晨3点（如需定时执行可取消注释）
   push:               # 代码push时自动触发
     branches: [ "**" ]  # 监听所有分支的push
 
@@ -14,11 +14,11 @@ jobs:
     env:
       # 定义需要同步的镜像列表（多个镜像用空格分隔）
       SOURCE_IMAGES: "gcr.io/cadvisor/cadvisor:latest"
-      # 阿里云仓库信息（建议后续迁移到GitHub Secrets）
+      # 阿里云仓库信息（建议迁移到GitHub Secrets）
       ALI_REGISTRY: "registry.cn-hangzhou.aliyuncs.com"  # 阿里云仓库地址
-      ALI_USERNAME: "筱晓爷cq"                           # 登录用户名
-      ALI_PASSWORD: "Hj20230701*"                        # 登录密码
-      ALI_REPO_PREFIX: "github-pushimages"               # 仓库路径（修改为目标仓库）
+      ALI_USERNAME: "筱晓爷cq"                           # 登录用户名（建议用Secrets存储）
+      ALI_PASSWORD: "Hj20230701*"                        # 登录密码（建议用Secrets存储）
+      ALI_REPO_PREFIX: "github-pushimages"               # 仓库路径前缀
 
     steps:
       - name: 拉取仓库代码
@@ -39,18 +39,21 @@ jobs:
             echo "✅ 拉取镜像 $image 成功"
           done
 
-      - name: 镜像打标签（保持原镜像名和版本）
+      - name: 镜像打标签（仅保留最后一级镜像名）
         run: |
           echo "开始为镜像打标签（目标仓库：${ALI_REGISTRY}/${ALI_REPO_PREFIX}）"
-          
+
           for image in $SOURCE_IMAGES; do
-            # 拆分镜像名和标签
-            IMAGE_NAME=$(echo "$image" | cut -d: -f1)
-            IMAGE_TAG=$(echo "$image" | cut -d: -f2)
-            
-            # 构建目标镜像地址（保持原镜像名和版本）
+            # 拆分镜像完整名称（含仓库路径）和标签
+            IMAGE_FULL_NAME=$(echo "$image" | cut -d: -f1)  # 例如：gcr.io/cadvisor/cadvisor
+            IMAGE_TAG=$(echo "$image" | cut -d: -f2)        # 例如：latest
+
+            # 提取最后一级镜像名（去掉前面的仓库路径）
+            IMAGE_NAME=$(basename "$IMAGE_FULL_NAME")       # 例如：cadvisor
+
+            # 构建目标镜像地址（简化路径）
             TARGET_IMAGE="${ALI_REGISTRY}/${ALI_REPO_PREFIX}/${IMAGE_NAME}:${IMAGE_TAG}"
-            
+
             echo "===== 标记镜像: $image → $TARGET_IMAGE ====="
             if ! docker tag "$image" "$TARGET_IMAGE"; then
               echo "❌ 标记镜像 $image 失败"
@@ -69,12 +72,14 @@ jobs:
       - name: 推送镜像到阿里云
         run: |
           echo "开始推送镜像到阿里云仓库"
-          
+
           for image in $SOURCE_IMAGES; do
-            IMAGE_NAME=$(echo "$image" | cut -d: -f1)
+            # 同样逻辑提取简化后的镜像名和目标地址
+            IMAGE_FULL_NAME=$(echo "$image" | cut -d: -f1)
             IMAGE_TAG=$(echo "$image" | cut -d: -f2)
+            IMAGE_NAME=$(basename "$IMAGE_FULL_NAME")
             TARGET_IMAGE="${ALI_REGISTRY}/${ALI_REPO_PREFIX}/${IMAGE_NAME}:${IMAGE_TAG}"
-            
+
             echo "===== 推送镜像: $TARGET_IMAGE ====="
             if ! docker push "$TARGET_IMAGE"; then
               echo "❌ 推送镜像 $TARGET_IMAGE 失败"
@@ -88,4 +93,3 @@ jobs:
           echo "开始清理本地镜像"
           docker system prune -af
           echo "✅ 清理完成"
-

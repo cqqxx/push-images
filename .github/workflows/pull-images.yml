@@ -1,0 +1,91 @@
+name: 同步外网镜像到阿里云
+
+# 触发条件：手动触发和每天凌晨3点（北京时间）执行
+on:
+  workflow_dispatch:  # 手动触发
+  schedule:
+    - cron: '0 19 * * *'  # UTC 19点 = 北京时间凌晨3点
+
+jobs:
+  mirror-image:
+    runs-on: ubuntu-latest
+    env:
+      # 定义需要同步的镜像列表（多个镜像用空格分隔）
+      SOURCE_IMAGES: "nginx:latest ubuntu:22.04 python:3.11 alpine:3.18"
+      # 阿里云仓库固定前缀（根据你的推送格式）
+      ALI_REPO_PREFIX: "cqqxx-test/github-images"
+    
+    steps:
+      - name: 拉取仓库代码
+        uses: actions/checkout@v4
+
+      - name: 设置Docker环境
+        uses: docker/setup-buildx-action@v3
+
+      - name: 拉取外网镜像
+        run: |
+          echo "开始拉取镜像列表：${SOURCE_IMAGES}"
+          for image in $SOURCE_IMAGES; do
+            echo "===== 拉取镜像: $image ====="
+            if ! docker pull $image; then
+              echo "❌ 拉取镜像 $image 失败"
+              exit 1
+            fi
+            echo "✅ 拉取镜像 $image 成功"
+          done
+
+      - name: 镜像打标签（适配阿里云仓库格式）
+        run: |
+          ALI_REGISTRY="${{ secrets.ALI_REGISTRY }}"
+          echo "开始为镜像打标签（目标仓库：${ALI_REGISTRY}/${ALI_REPO_PREFIX}）"
+          
+          for image in $SOURCE_IMAGES; do
+            # 拆分镜像名和标签
+            IMAGE_NAME=$(echo "$image" | cut -d: -f1)
+            IMAGE_TAG=$(echo "$image" | cut -d: -f2)
+            
+            # 处理镜像名中的特殊字符（替换斜线为横线，避免标签格式错误）
+            SANITIZED_NAME=$(echo "$IMAGE_NAME" | tr '/' '-')
+            
+            # 构建目标镜像地址（匹配你的推送格式）
+            TARGET_IMAGE="${ALI_REGISTRY}/${ALI_REPO_PREFIX}:${SANITIZED_NAME}-${IMAGE_TAG}"
+            
+            echo "===== 标记镜像: $image → $TARGET_IMAGE ====="
+            if ! docker tag "$image" "$TARGET_IMAGE"; then
+              echo "❌ 标记镜像 $image 失败"
+              exit 1
+            fi
+            echo "✅ 标记镜像 $image 成功"
+          done
+
+      - name: 登录阿里云容器仓库
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.ALI_REGISTRY }}
+          username: ${{ secrets.ALI_ACCESS_KEY_ID }}
+          password: ${{ secrets.ALI_ACCESS_KEY_SECRET }}
+
+      - name: 推送镜像到阿里云
+        run: |
+          ALI_REGISTRY="${{ secrets.ALI_REGISTRY }}"
+          echo "开始推送镜像到阿里云仓库"
+          
+          for image in $SOURCE_IMAGES; do
+            IMAGE_NAME=$(echo "$image" | cut -d: -f1)
+            IMAGE_TAG=$(echo "$image" | cut -d: -f2)
+            SANITIZED_NAME=$(echo "$IMAGE_NAME" | tr '/' '-')
+            TARGET_IMAGE="${ALI_REGISTRY}/${ALI_REPO_PREFIX}:${SANITIZED_NAME}-${IMAGE_TAG}"
+            
+            echo "===== 推送镜像: $TARGET_IMAGE ====="
+            if ! docker push "$TARGET_IMAGE"; then
+              echo "❌ 推送镜像 $TARGET_IMAGE 失败"
+              exit 1
+            fi
+            echo "✅ 推送镜像 $TARGET_IMAGE 成功"
+          done
+
+      - name: 清理本地镜像（节省空间）
+        run: |
+          echo "开始清理本地镜像"
+          docker system prune -af
+          echo "✅ 清理完成"

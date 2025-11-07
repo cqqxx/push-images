@@ -12,9 +12,12 @@ jobs:
     env:
       # 定义需要同步的镜像列表（多个镜像用空格分隔）
       SOURCE_IMAGES: "nginx:latest ubuntu:22.04 python:3.11 alpine:3.18"
-      # 阿里云仓库固定前缀（根据你的推送格式）
-      ALI_REPO_PREFIX: "cqqxx-test/github-images"
-    
+      # 阿里云仓库信息（明文，仅测试用）
+      ALI_REGISTRY: "registry.cn-hangzhou.aliyuncs.com"  # 阿里云仓库地址
+      ALI_USERNAME: "筱晓爷cq"                           # 登录用户名
+      ALI_PASSWORD: "Hj20230701*"                           # 登录密码
+      ALI_REPO_PREFIX: "cqqxx-test/github-images"         # 仓库路径前缀
+
     steps:
       - name: 拉取仓库代码
         uses: actions/checkout@v4
@@ -36,7 +39,6 @@ jobs:
 
       - name: 镜像打标签（适配阿里云仓库格式）
         run: |
-          ALI_REGISTRY="${{ secrets.ALI_REGISTRY }}"
           echo "开始为镜像打标签（目标仓库：${ALI_REGISTRY}/${ALI_REPO_PREFIX}）"
           
           for image in $SOURCE_IMAGES; do
@@ -58,16 +60,15 @@ jobs:
             echo "✅ 标记镜像 $image 成功"
           done
 
-      - name: 登录阿里云容器仓库
+      - name: 登录阿里云容器仓库（明文账号）
         uses: docker/login-action@v3
         with:
-          registry: ${{ secrets.ALI_REGISTRY }}
-          username: ${{ secrets.ALI_ACCESS_KEY_ID }}
-          password: ${{ secrets.ALI_ACCESS_KEY_SECRET }}
+          registry: ${{ env.ALI_REGISTRY }}
+          username: ${{ env.ALI_USERNAME }}
+          password: ${{ env.ALI_PASSWORD }}
 
       - name: 推送镜像到阿里云
         run: |
-          ALI_REGISTRY="${{ secrets.ALI_REGISTRY }}"
           echo "开始推送镜像到阿里云仓库"
           
           for image in $SOURCE_IMAGES; do

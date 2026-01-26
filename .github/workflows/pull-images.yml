@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # 定义需要同步的镜像列表（多个镜像用空格分隔）
-      SOURCE_IMAGES: "redis:6.2.20"
+      SOURCE_IMAGES: "busybox:latest"
       # 阿里云仓库信息（建议后续迁移到GitHub Secrets）
       ALI_REGISTRY: "registry.cn-hangzhou.aliyuncs.com"  # 阿里云仓库地址
       ALI_USERNAME: "筱晓爷cq"                           # 登录用户名
